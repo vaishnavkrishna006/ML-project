@@ -1,20 +1,20 @@
 # Recommendation Models Implementation
 
-This project implements **3 state-of-the-art recommendation system models** for your music streaming dataset.
+This project implements **3 state-of-the-art recommendation system models** for your movie dataset.
 
 ## 📋 Overview
 
 ### Three Models Implemented:
 
 #### 1. **Collaborative Filtering**
-- **User-Based CF**: Finds similar users and recommends their favorite artists
-- **Item-Based CF**: Finds artists similar to ones the user already listens to
-- Uses cosine similarity on user-artist interaction matrix
+- **User-Based CF**: Finds similar users and recommends their favorite movies
+- **Item-Based CF**: Finds movies similar to ones the user already watched
+- Uses cosine similarity on user-movie interaction matrix
 
 #### 2. **Content-Based Filtering**
-- Analyzes user demographics and listening patterns
-- Creates user profiles based on age, total plays, number of artists
-- Recommends artists based on similar user profiles
+- Analyzes user demographics and viewing patterns
+- Creates user profiles based on age, total watches, number of movies
+- Recommends movies based on similar user profiles
 
 #### 3. **Hybrid Model**
 - Combines all three approaches with configurable weights

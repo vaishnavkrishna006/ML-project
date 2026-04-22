@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Recommendation System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>� Movie Recommendation System</h1>
+                <p>Get personalized movie recommendations using AI-powered algorithms</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Stats Section -->
+            <section class="stats-section">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="stat-users">-</div>
+                        <div class="stat-label">Total Users</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="stat-records">-</div>
+                        <div class="stat-label">Play Records</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="stat-movies">-</div>
+                        <div class="stat-label">Movies</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Input Section -->
+            <section class="input-section">
+                <div class="form-card">
+                    <h2>Get Recommendations</h2>
+                    
+                    <form id="recommendationForm">
+                        <!-- User ID Input -->
+                        <div class="form-group">
+                            <label for="userId">User ID:</label>
+                            <input type="number" id="userId" name="userId" placeholder="Enter user ID (e.g., 211145)" required>
+                            <small>Try any valid user ID from the dataset</small>
+                        </div>
+
+                        <!-- Model Selection -->
+                        <div class="form-group">
+                            <label for="modelType">Recommendation Model:</label>
+                            <select id="modelType" name="modelType" required>
+                                <option value="hybrid">🔀 Hybrid (Recommended)</option>
+                                <option value="user_cf">👥 User-Based Collaborative Filtering</option>
+                                <option value="item_cf">� Item-Based Collaborative Filtering</option>
+                                <option value="content">👤 Content-Based Filtering</option>
+                            </select>
+                            <small id="modelDescription">Combines all approaches for best results</small>
+                        </div>
+
+                        <!-- Number of Recommendations -->
+                        <div class="form-group">
+                            <label for="nRecommendations">Number of Recommendations:</label>
+                            <input type="number" id="nRecommendations" name="nRecommendations" min="1" max="20" value="5" required>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <button type="submit" class="btn-submit" id="submitBtn">
+                            <span>Get Recommendations</span>
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <div class="results-card">
+                    <h2 id="resultsTitle">Recommendations</h2>
+                    
+                    <div class="results-info">
+                        <span class="info-badge">User: <span id="resultUserId">-</span></span>
+                        <span class="info-badge">Model: <span id="resultModelType">-</span></span>
+                        <span class="info-badge">Count: <span id="resultCount">-</span></span>
+                    </div>
+
+                    <div id="recommendationsTable" class="recommendations-table-container">
+                        <!-- Movie recommendations will be displayed here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section class="error-section" id="errorSection" style="display: none;">
+                <div class="error-card">
+                    <h3>❌ Error</h3>
+                    <p id="errorMessage"></p>
+                </div>
+            </section>
+
+            <!-- Loading Section -->
+            <section class="loading-section" id="loadingSection" style="display: none;">
+                <div class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Generating recommendations...</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- Info Section -->
+        <section class="info-section">
+            <div class="info-cards">
+                <div class="info-card">
+                    <h3>🔀 Hybrid Model</h3>
+                    <p>Combines user-based, item-based, and content-based filtering for the best recommendations.</p>
+                </div>
+                <div class="info-card">
+                    <h3>👥 User-Based CF</h3>
+                    <p>Finds similar users and recommends their favorite movies. Best for users with watch history.</p>
+                </div>
+                <div class="info-card">
+                    <h3>� Item-Based CF</h3>
+                    <p>Finds movies similar to ones you already watched. Great for exploring related films.</p>
+                </div>
+                <div class="info-card">
+                    <h3>👤 Content-Based</h3>
+                    <p>Analyzes user profiles and demographics. Ideal for new users or cold-start scenarios.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>&copy; 2026 Movie Recommendation System | Powered by ML</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
