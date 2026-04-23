@@ -276,3 +276,128 @@ function getPreference(key) {
 console.log('%cMovie Recommendation System', 'color: #667eea; font-size: 16px; font-weight: bold;');
 console.log('%cVersion 1.0.0', 'color: #764ba2;');
 console.log('%cReady for recommendations!', 'color: #27ae60; font-weight: bold;');
+
+// ============================================================================
+// TMDB MOVIE SEARCH & METADATA (NEW)
+// ============================================================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    setupSearchEvent();
+});
+
+function setupSearchEvent() {
+    const searchForm = document.getElementById('searchForm');
+    if (searchForm) {
+        searchForm.addEventListener('submit', handleSearchSubmit);
+    }
+}
+
+async function handleSearchSubmit(e) {
+    e.preventDefault();
+    const query = document.getElementById('searchQuery').value.trim();
+    if (!query || query.length < 2) {
+        showSearchResults([], 'Please enter at least 2 characters.');
+        return;
+    }
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/search?query=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        if (data.success) {
+            showSearchResults(data.results);
+        } else {
+            showSearchResults([], data.message || 'No results found.');
+        }
+    } catch (err) {
+        showSearchResults([], 'Error searching movies.');
+    }
+}
+
+function showSearchResults(results, errorMsg = null) {
+    const container = document.getElementById('searchResults');
+    if (!container) return;
+    if (errorMsg) {
+        container.innerHTML = `<div class="error-msg">${errorMsg}</div>`;
+        container.style.display = 'block';
+        return;
+    }
+    if (!results || results.length === 0) {
+        container.innerHTML = '<div class="error-msg">No results found.</div>';
+        container.style.display = 'block';
+        return;
+    }
+    let html = '';
+    results.forEach(movie => {
+        html += `
+        <div class="movie-card" onclick="showMovieDetails(${movie.id})">
+            <div class="movie-poster">${movie.poster ? `<img src='${movie.poster}' alt='Poster'>` : '🎬'}</div>
+            <div class="movie-info">
+                <div class="movie-title">${movie.title}</div>
+                <div class="movie-year">${movie.year || ''}</div>
+                <div class="movie-rating"><span class="rating-star">★</span> <span class="rating-value">${movie.rating || '-'}</span> <span class="rating-votes">(${movie.vote_count || 0})</span></div>
+                <div class="movie-overview">${movie.overview || ''}</div>
+            </div>
+        </div>`;
+    });
+    container.innerHTML = html;
+    container.style.display = 'grid';
+}
+
+// Modal for movie details
+window.showMovieDetails = async function(movieId) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/movie-metadata/${movieId}`);
+        const data = await res.json();
+        if (data.success) {
+            showMovieModal(data.movie);
+        }
+    } catch (err) {
+        alert('Failed to load movie details.');
+    }
+};
+
+function showMovieModal(movie) {
+    let modal = document.getElementById('movieModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'movieModal';
+        modal.className = 'modal';
+        document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>${movie.title} (${movie.year || ''})</span>
+                <button class="modal-close" onclick="closeMovieModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-backdrop">${movie.backdrop ? `<img src='${movie.backdrop}' alt='Backdrop'>` : '🎬'}</div>
+                <div class="detail-rating"><span>★</span> ${movie.rating || '-'} <span style="color:#999;font-size:0.8em;">(${movie.vote_count || 0} votes)</span></div>
+                <div class="detail-genres">${(movie.genres || []).map(g => `<span class='detail-genre'>${g}</span>`).join(' ')}</div>
+                <div class="detail-section"><h4>Overview</h4><p>${movie.overview || 'No description.'}</p></div>
+                <div class="detail-section"><h4>Cast</h4><div class="cast-list">${(movie.cast || []).map(c => `<div class='cast-item'><span class='cast-name'>${c.name}</span> <span class='cast-character'>as ${c.character}</span></div>`).join(' ')}</div></div>
+                <div class="detail-section"><h4>Production Countries</h4><p>${(movie.production_countries || []).join(', ')}</p></div>
+            </div>
+        </div>
+    `;
+    modal.classList.add('show');
+}
+
+window.closeMovieModal = function() {
+    const modal = document.getElementById('movieModal');
+    if (modal) modal.classList.remove('show');
+};
+
+// Close modal on outside click
+window.addEventListener('click', function(e) {
+    const modal = document.getElementById('movieModal');
+    if (modal && e.target === modal) {
+        closeMovieModal();
+    }
+});
+
+// ============================================================================
+// ENHANCED RECOMMENDATIONS WITH RATINGS (NEW)
+// ============================================================================
+
+// Optionally, you can add a toggle to use /api/recommend-with-ratings for boosted recommendations.
+// For now, you can swap the endpoint in handleFormSubmit to '/api/recommend-with-ratings' to test.

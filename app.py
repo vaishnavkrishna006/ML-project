@@ -4,20 +4,26 @@ Provides a user interface to get recommendations from all 3 models
 """
 
 from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
 import pandas as pd
 import numpy as np
 from scipy.sparse import csr_matrix
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import StandardScaler
+from tmdb_integration import get_tmdb_client
 import warnings
 warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
+CORS(app)
+
+# TMDB integration
+tmdb_client = None
 
 # Global variables to store models
 cf_model = None
 cb_model = None
-play_counts = None
+watch_counts = None
 users = None
 
 # ============================================================================
@@ -229,7 +235,7 @@ class HybridRecommender:
 # ============================================================================
 
 def load_models():
-    global cf_model, cb_model, watch_counts, users
+    global cf_model, cb_model, watch_counts, users, tmdb_client
     
     print("Loading data...")
     watch_counts = pd.read_csv('../datasets/data/movie_watches.csv')
@@ -242,6 +248,9 @@ def load_models():
     print("Initializing models...")
     cf_model = CollaborativeFiltering(watch_counts)
     cb_model = ContentBasedFiltering(users, watch_counts)
+    
+    print("Initializing TMDB integration...")
+    tmdb_client = get_tmdb_client()
     
     print("Models loaded successfully!")
 
@@ -312,6 +321,109 @@ def get_stats():
         return jsonify({'success': True, 'stats': stats})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/search', methods=['GET'])
+def search_movies():
+    """Search for movies using TMDB"""
+    try:
+        query = request.args.get('query', '').strip()
+        year = request.args.get('year', type=int)
+        
+        if not query or len(query) < 2:
+            return jsonify({
+                'success': False,
+                'message': 'Please enter at least 2 characters'
+            })
+        
+        results = tmdb_client.search_movie(query, year)
+        
+        return jsonify({
+            'success': True,
+            'query': query,
+            'results': results,
+            'count': len(results)
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Search error: {str(e)}'
+        })
+
+@app.route('/api/movie-metadata/<int:movie_id>', methods=['GET'])
+def get_movie_metadata(movie_id):
+    """Get detailed metadata for a specific movie from TMDB"""
+    try:
+        details = tmdb_client.get_movie_details(movie_id)
+        
+        if not details:
+            return jsonify({
+                'success': False,
+                'message': f'Movie {movie_id} not found'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'movie': details
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching movie details: {str(e)}'
+        })
+
+@app.route('/api/recommend-with-ratings', methods=['POST'])
+def get_recommendations_with_ratings():
+    """Get recommendations boosted by external TMDB ratings"""
+    try:
+        data = request.json
+        user_id = int(data.get('user_id'))
+        model_type = data.get('model_type', 'hybrid')
+        n_recommendations = int(data.get('n_recommendations', 5))
+        rating_weight = float(data.get('rating_weight', 0.3))  # 0-1, how much to weight external ratings
+        
+        # Get base recommendations
+        if model_type == 'user_cf':
+            recs = cf_model.user_based_cf(user_id, n_recommendations)
+            recs = recs.rename(columns={'score': 'recommendation_score'})
+        elif model_type == 'item_cf':
+            recs = cf_model.item_based_cf(user_id, n_recommendations)
+            recs = recs.rename(columns={'score': 'recommendation_score'})
+        elif model_type == 'content':
+            recs = cb_model.recommend_based_on_profile(user_id, n_recommendations)
+            recs = recs.rename(columns={'score': 'recommendation_score'})
+        else:  # hybrid
+            hybrid = HybridRecommender(watch_counts, users)
+            recs = hybrid.recommend(user_id, n_recommendations)
+            recs = recs.rename(columns={'hybrid_score': 'recommendation_score'})
+        
+        if len(recs) == 0:
+            return jsonify({
+                'success': False,
+                'message': f'No recommendations found for User {user_id}'
+            })
+        
+        # Enhance with TMDB ratings
+        recs = tmdb_client.score_with_external_ratings(recs, rating_weight)
+        
+        recs['rank'] = range(1, len(recs) + 1)
+        recommendations = recs[['rank', 'movie_id', 'recommendation_score', 'tmdb_rating', 'final_score']].to_dict('records')
+        
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'model_type': model_type,
+            'recommendations': recommendations,
+            'count': len(recommendations),
+            'rating_weight': rating_weight
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        })
 
 @app.route('/health', methods=['GET'])
 def health():
