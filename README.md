@@ -62,10 +62,10 @@ This will:
 from recommendation_models import HybridRecommender, load_data
 
 # Load data
-play_counts, users, user_id_map, artist_id_map, users_sim, artists_sim = load_data()
+movie_watches, users = load_data()
 
 # Create hybrid recommender
-hybrid = HybridRecommender(play_counts, users, user_id_map, artist_id_map)
+hybrid = HybridRecommender(movie_watches, users)
 
 # Get recommendations for a user
 recommendations = hybrid.recommend(user_id=123, n_recommendations=5)

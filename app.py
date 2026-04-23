@@ -232,11 +232,9 @@ def load_models():
     global cf_model, cb_model, watch_counts, users
     
     print("Loading data...")
-    watch_counts = pd.read_csv('../datasets/data/play_counts.csv')
-    users = pd.read_csv('../datasets/data/users.csv')
-    
-    # Rename columns for movie dataset
-    watch_counts.columns = ['user_id', 'movie_id', 'watch_count']
+    watch_counts = pd.read_csv('../datasets/data/movie_watches.csv')
+    users = pd.read_csv('../datasets/web/user_details.csv')
+    users.columns = users.columns.str.lower()
     
     # Sample for faster loading
     watch_counts = watch_counts.sample(n=min(1000000, len(watch_counts)), random_state=42)

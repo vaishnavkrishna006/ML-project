@@ -13,23 +13,16 @@ def load_data():
     """Load the dataset from CSV files"""
     print("Loading data...")
     
-    # Load main data
-    play_counts = pd.read_csv('../datasets/data/play_counts.csv')
-    users = pd.read_csv('../datasets/data/users.csv')
+    # Load main data - movie watches dataset
+    movie_watches = pd.read_csv('../datasets/data/movie_watches.csv')
+    users = pd.read_csv('../datasets/web/user_details.csv')
+    users.columns = users.columns.str.lower()
     
-    # Load mappings
-    user_id_map = pd.read_csv('../datasets/mapping/user_id_map.csv')
-    artist_id_map = pd.read_csv('../datasets/mapping/artist_id_map.csv')
-    
-    # Load similarity data if available
-    users_similarity = pd.read_csv('../datasets/similarity/users_similarity.csv', index_col=0)
-    artists_similarity = pd.read_csv('../datasets/similarity/artists_similarity.csv', index_col=0)
-    
-    print(f"Play counts shape: {play_counts.shape}")
+    print(f"Movie watches shape: {movie_watches.shape}")
     print(f"Users shape: {users.shape}")
     print("Data loaded successfully!\n")
     
-    return play_counts, users, user_id_map, artist_id_map, users_similarity, artists_similarity
+    return movie_watches, users
 
 # ============================================================================
 # 1. COLLABORATIVE FILTERING
@@ -41,13 +34,13 @@ class CollaborativeFiltering:
     Includes both User-based and Item-based approaches
     """
     
-    def __init__(self, play_counts):
-        """Initialize with play counts data"""
-        # Create user-artist interaction matrix
-        self.interaction_matrix = play_counts.pivot_table(
+    def __init__(self, movie_watches):
+        """Initialize with movie watch counts data"""
+        # Create user-movie interaction matrix
+        self.interaction_matrix = movie_watches.pivot_table(
             index='user_id',
-            columns='artist_id',
-            values='play_count',
+            columns='movie_id',
+            values='watch_count',
             fill_value=0
         )
         print(f"Interaction matrix shape: {self.interaction_matrix.shape}")
@@ -55,7 +48,7 @@ class CollaborativeFiltering:
     def user_based_cf(self, user_id, n_recommendations=5, n_similar_users=10):
         """
         User-based Collaborative Filtering
-        Find similar users and recommend their favorite artists
+        Find similar users and recommend their favorite movies
         """
         # Calculate user similarity using cosine similarity
         user_similarity = cosine_similarity(self.interaction_matrix)
@@ -72,19 +65,19 @@ class CollaborativeFiltering:
         similar_users = user_similarity_df[user_id].sort_values(ascending=False)[1:n_similar_users+1]
         similar_users_list = similar_users.index.tolist()
         
-        # Get artists liked by similar users but not by target user
-        target_user_artists = set(self.interaction_matrix.loc[user_id][self.interaction_matrix.loc[user_id] > 0].index)
+        # Get movies liked by similar users but not by target user
+        target_user_movies = set(self.interaction_matrix.loc[user_id][self.interaction_matrix.loc[user_id] > 0].index)
         
         # Aggregate recommendations from similar users
         recommendations = {}
         for similar_user in similar_users_list:
-            similar_user_artists = self.interaction_matrix.loc[similar_user][self.interaction_matrix.loc[similar_user] > 0]
-            for artist, play_count in similar_user_artists.items():
-                if artist not in target_user_artists:
-                    recommendations[artist] = recommendations.get(artist, 0) + play_count * similar_users[similar_user]
+            similar_user_movies = self.interaction_matrix.loc[similar_user][self.interaction_matrix.loc[similar_user] > 0]
+            for movie, watch_count in similar_user_movies.items():
+                if movie not in target_user_movies:
+                    recommendations[movie] = recommendations.get(movie, 0) + watch_count * similar_users[similar_user]
         
         # Sort and return top recommendations
-        recommendations_df = pd.DataFrame(list(recommendations.items()), columns=['artist_id', 'score'])
+        recommendations_df = pd.DataFrame(list(recommendations.items()), columns=['movie_id', 'score'])
         recommendations_df = recommendations_df.sort_values('score', ascending=False).head(n_recommendations)
         
         return recommendations_df
@@ -92,32 +85,32 @@ class CollaborativeFiltering:
     def item_based_cf(self, user_id, n_recommendations=5):
         """
         Item-based Collaborative Filtering
-        Find similar artists to those the user already likes
+        Find similar movies to those the user already watches
         """
-        # Calculate artist similarity
-        artist_similarity = cosine_similarity(self.interaction_matrix.T)
-        artist_similarity_df = pd.DataFrame(
-            artist_similarity,
+        # Calculate movie similarity
+        movie_similarity = cosine_similarity(self.interaction_matrix.T)
+        movie_similarity_df = pd.DataFrame(
+            movie_similarity,
             index=self.interaction_matrix.columns,
             columns=self.interaction_matrix.columns
         )
         
-        # Get artists the user has interacted with
-        user_artists = self.interaction_matrix.loc[user_id][self.interaction_matrix.loc[user_id] > 0]
+        # Get movies the user has watched
+        user_movies = self.interaction_matrix.loc[user_id][self.interaction_matrix.loc[user_id] > 0]
         
-        if len(user_artists) == 0:
+        if len(user_movies) == 0:
             return pd.DataFrame()
         
         recommendations = {}
-        for artist, play_count in user_artists.items():
-            # Find similar artists
-            similar_artists = artist_similarity_df[artist].sort_values(ascending=False)[1:6]
-            for similar_artist, similarity in similar_artists.items():
-                if similar_artist not in user_artists.index:
-                    recommendations[similar_artist] = recommendations.get(similar_artist, 0) + similarity * play_count
+        for movie, watch_count in user_movies.items():
+            # Find similar movies
+            similar_movies = movie_similarity_df[movie].sort_values(ascending=False)[1:6]
+            for similar_movie, similarity in similar_movies.items():
+                if similar_movie not in user_movies.index:
+                    recommendations[similar_movie] = recommendations.get(similar_movie, 0) + similarity * watch_count
         
         # Sort and return top recommendations
-        recommendations_df = pd.DataFrame(list(recommendations.items()), columns=['artist_id', 'score'])
+        recommendations_df = pd.DataFrame(list(recommendations.items()), columns=['movie_id', 'score'])
         recommendations_df = recommendations_df.sort_values('score', ascending=False).head(n_recommendations)
         
         return recommendations_df
@@ -128,29 +121,27 @@ class CollaborativeFiltering:
 
 class ContentBasedFiltering:
     """
-    Content-Based Filtering using user demographics and preferences
+    Content-Based Filtering using user demographics and viewing preferences
     """
     
-    def __init__(self, users, play_counts, user_id_map, artist_id_map):
-        """Initialize with user and play count data"""
+    def __init__(self, users, movie_watches):
+        """Initialize with user and movie watch data"""
         self.users = users
-        self.play_counts = play_counts
-        self.user_id_map = user_id_map
-        self.artist_id_map = artist_id_map
+        self.movie_watches = movie_watches
         
         # Create user profile
         self.user_profiles = self._create_user_profiles()
         print(f"User profiles shape: {self.user_profiles.shape}")
     
     def _create_user_profiles(self):
-        """Create user profiles based on demographics and listening habits"""
+        """Create user profiles based on demographics and watching habits"""
         user_profiles = self.users.copy()
         
-        # Add listening statistics per user
-        user_stats = self.play_counts.groupby('user_id').agg({
-            'play_count': ['sum', 'mean', 'std', 'count']
+        # Add watching statistics per user
+        user_stats = self.movie_watches.groupby('user_id').agg({
+            'watch_count': ['sum', 'mean', 'std', 'count']
         }).reset_index()
-        user_stats.columns = ['user_id', 'total_plays', 'avg_plays', 'std_plays', 'num_artists']
+        user_stats.columns = ['user_id', 'total_watches', 'avg_watches', 'std_watches', 'num_movies']
         
         user_profiles = user_profiles.merge(user_stats, on='user_id', how='left')
         user_profiles = user_profiles.fillna(0)
@@ -198,23 +189,23 @@ class ContentBasedFiltering:
         return similar_users.index.tolist()
     
     def recommend_based_on_profile(self, user_id, n_recommendations=5):
-        """Recommend artists based on user profile similarity"""
+        """Recommend movies based on user profile similarity"""
         similar_users = self.find_similar_users(user_id, n_similar=10)
         
         if not similar_users:
             return pd.DataFrame()
         
-        # Get artists played by similar users
-        user_artists = set(self.play_counts[self.play_counts['user_id'] == user_id]['artist_id'])
+        # Get movies watched by similar users
+        user_movies = set(self.movie_watches[self.movie_watches['user_id'] == user_id]['movie_id'])
         
         recommendations = {}
         for similar_user in similar_users:
-            similar_user_plays = self.play_counts[self.play_counts['user_id'] == similar_user]
-            for _, row in similar_user_plays.iterrows():
-                if row['artist_id'] not in user_artists:
-                    recommendations[row['artist_id']] = recommendations.get(row['artist_id'], 0) + row['play_count']
+            similar_user_watches = self.movie_watches[self.movie_watches['user_id'] == similar_user]
+            for _, row in similar_user_watches.iterrows():
+                if row['movie_id'] not in user_movies:
+                    recommendations[row['movie_id']] = recommendations.get(row['movie_id'], 0) + row['watch_count']
         
-        recommendations_df = pd.DataFrame(list(recommendations.items()), columns=['artist_id', 'score'])
+        recommendations_df = pd.DataFrame(list(recommendations.items()), columns=['movie_id', 'score'])
         recommendations_df = recommendations_df.sort_values('score', ascending=False).head(n_recommendations)
         
         return recommendations_df
@@ -231,13 +222,13 @@ class HybridRecommender:
     - Content-Based Filtering
     """
     
-    def __init__(self, play_counts, users, user_id_map, artist_id_map):
+    def __init__(self, movie_watches, users):
         """Initialize all three models"""
         print("\nInitializing Hybrid Model...")
         
-        self.cf_model = CollaborativeFiltering(play_counts)
-        self.cb_model = ContentBasedFiltering(users, play_counts, user_id_map, artist_id_map)
-        self.play_counts = play_counts
+        self.cf_model = CollaborativeFiltering(movie_watches)
+        self.cb_model = ContentBasedFiltering(users, movie_watches)
+        self.movie_watches = movie_watches
         
         print("Hybrid model initialized!\n")
     
