@@ -20,6 +20,7 @@ from tmdb_data_fetcher import get_tmdb_fetcher
 from nlp_query_processor import create_query_processor
 from recommendation_engine import create_recommendation_engine
 from analytics import create_analytics
+from external_ratings_fetcher import ExternalRatingsFetcher
 
 # Load environment variables
 load_dotenv()
@@ -43,6 +44,7 @@ recommendation_engine = None
 analytics_engine = None
 movies_db = None
 genres_map = None
+external_ratings_fetcher = None
 
 # ============================================================================
 # INITIALIZATION FUNCTIONS
@@ -50,7 +52,7 @@ genres_map = None
 
 def initialize_system():
     """Initialize all system components at startup"""
-    global tmdb_fetcher, nlp_processor, recommendation_engine, analytics_engine, movies_db, genres_map
+    global tmdb_fetcher, nlp_processor, recommendation_engine, analytics_engine, movies_db, genres_map, external_ratings_fetcher
     
     logger.info("=" * 80)
     logger.info("Initializing Smart Movie Recommendation System")
@@ -93,6 +95,10 @@ def initialize_system():
     # Initialize recommendation engine
     recommendation_engine = create_recommendation_engine(nlp_processor, tmdb_fetcher)
     logger.info("✓ Hybrid Recommendation Engine initialized")
+
+    # Optional external metadata source: IMDb + Rotten Tomatoes via OMDb
+    external_ratings_fetcher = ExternalRatingsFetcher(os.getenv('OMDB_API_KEY'))
+    logger.info("✓ External ratings fetcher initialized")
     
     # Initialize analytics
     analytics_engine = create_analytics(movies_db)
@@ -143,7 +149,7 @@ def get_recommendations():
     try:
         data = request.json
         query = data.get('query', '').strip()
-        n_recs = int(data.get('n_recommendations', 5))
+        requested_n = int(data.get('n_recommendations', 0))
         
         if not query or len(query) < 3:
             return jsonify({
@@ -157,11 +163,15 @@ def get_recommendations():
                 'message': 'Movie database not loaded'
             }), 503
         
+        # Parse intent first so natural language count works ("give me 7 ...")
+        intent = nlp_processor.process_query(query)
+        n_recs = requested_n if requested_n > 0 else int(intent.get('count', 5))
+
         # Get recommendations
         recommendations = recommendation_engine.recommend(
             query=query,
             movies_df=movies_db,
-            n_recommendations=min(n_recs, 20),
+            n_recommendations=min(n_recs, 100),
             genres_dict=genres_map
         )
         
@@ -174,6 +184,11 @@ def get_recommendations():
         # Convert to JSON-serializable format
         recs_json = []
         for _, row in recommendations.iterrows():
+            year = str(row.get('date', ''))[:4] if row.get('date') else None
+            external_meta = external_ratings_fetcher.get_external_metadata(
+                title=str(row['title']),
+                year=year
+            ) if external_ratings_fetcher else {}
             recs_json.append({
                 'rank': int(row['rank']),
                 'movie_id': int(row['id']),
@@ -183,11 +198,16 @@ def get_recommendations():
                 'score': float(row['final_score']),
                 'genres': row['genres'] if isinstance(row['genres'], list) else [],
                 'overview': str(row['overview'])[:200],  # Truncate overview
+                'imdb_title': external_meta.get('imdb_title'),
+                'imdb_id': external_meta.get('imdb_id'),
+                'imdb_rating': external_meta.get('imdb_rating'),
+                'rotten_tomatoes_rating': external_meta.get('rotten_tomatoes_rating'),
             })
         
         return jsonify({
             'success': True,
             'query': query,
+            'intent': intent,
             'recommendations': recs_json,
             'count': len(recs_json)
         })
@@ -304,6 +324,7 @@ def get_genre_analytics():
             'success': True,
             'genres': analytics_engine.get_popular_genres(),
             'genre_stats': analytics_engine.get_genre_statistics(),
+            'genres_per_year': analytics_engine.get_most_popular_genres_per_year(),
         })
     
     except Exception as e:

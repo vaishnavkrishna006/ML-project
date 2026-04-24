@@ -1,14 +1,9 @@
-"""
-NLP Query Processor Module
-Understands natural language movie queries and extracts intent
-Uses regex and keyword matching for intent extraction
-Optionally uses sentence transformers for semantic understanding
-"""
+"""Natural-language intent extraction for movie recommendations."""
 
 import re
-import json
 import logging
-from typing import Dict, List, Tuple
+from datetime import datetime
+from typing import Dict, List, Optional
 
 # Try to import sentence transformers (optional)
 try:
@@ -26,7 +21,7 @@ class NLPQueryProcessor:
     Processes natural language queries to extract movie recommendation intent
     """
     
-    # Genre mappings
+    # Genre mappings (TMDb-compatible names)
     GENRE_KEYWORDS = {
         'action': ['action', 'fight', 'battle', 'explosion', 'adventure'],
         'comedy': ['comedy', 'funny', 'humor', 'laugh', 'hilarious'],
@@ -34,10 +29,11 @@ class NLPQueryProcessor:
         'horror': ['horror', 'scary', 'terror', 'frightening', 'spooky'],
         'romance': ['romance', 'love', 'romantic', 'couple', 'relationship'],
         'thriller': ['thriller', 'suspense', 'mystery', 'crime', 'detective'],
-        'sci-fi': ['sci-fi', 'science fiction', 'future', 'space', 'alien', 'technology'],
+        'science fiction': ['sci-fi', 'science fiction', 'future', 'space', 'alien', 'technology'],
         'fantasy': ['fantasy', 'magic', 'wizard', 'dragon', 'magical'],
         'animated': ['animated', 'animation', 'cartoon'],
         'documentary': ['documentary', 'real', 'true story', 'historical'],
+        'crime': ['crime', 'gangster', 'mafia', 'heist'],
     }
     
     # Mood mappings
@@ -89,6 +85,7 @@ class NLPQueryProcessor:
             'min_rating': self._extract_rating(query_lower),
             'year': self._extract_year(query_lower),
             'keywords': self._extract_keywords(query_lower),
+            'reference_title': self._extract_reference_title(query),
             'query_tokens': query_lower.split(),
         }
         
@@ -160,10 +157,10 @@ class NLPQueryProcessor:
         
         return 0.0  # No rating filter by default
     
-    def _extract_year(self, query: str) -> int:
+    def _extract_year(self, query: str) -> Optional[int]:
         """Extract year filter if mentioned"""
         # Look for year patterns like "2023" or "recent", "old"
-        year_patterns = ['20\d{2}', '19\d{2}']
+        year_patterns = [r'20\d{2}', r'19\d{2}']
         
         for pattern in year_patterns:
             match = re.search(pattern, query)
@@ -171,10 +168,11 @@ class NLPQueryProcessor:
                 return int(match.group())
         
         # Handle relative time references
+        current_year = datetime.now().year
         time_keywords = {
-            'recent': 2023,
-            'latest': 2023,
-            'new': 2023,
+            'recent': current_year,
+            'latest': current_year,
+            'new': current_year,
             'old': 2000,
             'classic': 1990,
         }
@@ -199,7 +197,27 @@ class NLPQueryProcessor:
         
         words = query.split()
         keywords = [w for w in words if w not in stop_words and len(w) > 2]
-        return keywords[:10]  # Return top 10
+        return keywords[:10]
+
+    def _extract_reference_title(self, query: str) -> Optional[str]:
+        """
+        Extract "movie like X" references.
+        Examples:
+        - "suggest emotional movies like Titanic"
+        - "movies similar to Inception"
+        """
+        patterns = [
+            r'like\s+([a-zA-Z0-9:\'\-\s]+)',
+            r'similar to\s+([a-zA-Z0-9:\'\-\s]+)',
+            r'kind of\s+([a-zA-Z0-9:\'\-\s]+)',
+        ]
+        cleaned_query = query.strip()
+        for pattern in patterns:
+            match = re.search(pattern, cleaned_query, flags=re.IGNORECASE)
+            if match:
+                title = match.group(1).strip(" .,!?:;\"'")
+                return title if len(title) >= 2 else None
+        return None
     
     def get_semantic_embedding(self, text: str):
         """Get semantic embedding of text using Sentence-BERT"""

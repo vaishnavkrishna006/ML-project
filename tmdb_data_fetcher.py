@@ -4,12 +4,12 @@ Handles all interactions with The Movie Database (TMDb) API
 Includes caching, error handling, and data preprocessing
 """
 
+import ast
 import requests
 import pandas as pd
 import json
 import os
-from datetime import datetime, timedelta
-from functools import lru_cache
+import time
 import logging
 
 # Setup logging
@@ -41,7 +41,6 @@ class TMDbFetcher:
         
         # Session for API requests
         self.session = requests.Session()
-        self.session.timeout = 10
         
         if self.api_key:
             logger.info(f"✓ TMDb API initialized (key: {self.api_key[:5]}...)")
@@ -103,7 +102,8 @@ class TMDbFetcher:
                 
                 response = self.session.get(
                     f"{self.base_url}/discover/movie",
-                    params=params
+                    params=params,
+                    timeout=10
                 )
                 response.raise_for_status()
                 
@@ -135,9 +135,11 @@ class TMDbFetcher:
         if not query or len(query) < 2:
             return pd.DataFrame()
         
-        cache_key = f"search_{query}"
+        cache_key = f"search_{query.lower().strip()}"
         if cache_key in self.movie_cache:
-            return pd.DataFrame(self.movie_cache[cache_key])
+            payload = self.movie_cache[cache_key]
+            if self._cache_valid(payload):
+                return pd.DataFrame(payload.get('data', payload))
         
         if not self.api_key:
             return self._mock_search_results(query, max_results)
@@ -151,7 +153,8 @@ class TMDbFetcher:
             
             response = self.session.get(
                 f"{self.base_url}/search/movie",
-                params=params
+                params=params,
+                timeout=10
             )
             response.raise_for_status()
             
@@ -159,7 +162,10 @@ class TMDbFetcher:
             df = pd.DataFrame(movies)
             df = self._clean_movie_data(df)
             
-            self.movie_cache[cache_key] = movies
+            self.movie_cache[cache_key] = {
+                'ts': int(time.time()),
+                'data': movies
+            }
             self._save_cache()
             
             return df
@@ -180,7 +186,9 @@ class TMDbFetcher:
         """
         cache_key = f"movie_{movie_id}"
         if cache_key in self.movie_cache:
-            return self.movie_cache[cache_key]
+            payload = self.movie_cache[cache_key]
+            if self._cache_valid(payload):
+                return payload.get('data', payload)
         
         if not self.api_key:
             return self._mock_movie_details(movie_id)
@@ -193,14 +201,18 @@ class TMDbFetcher:
             
             response = self.session.get(
                 f"{self.base_url}/movie/{movie_id}",
-                params=params
+                params=params,
+                timeout=10
             )
             response.raise_for_status()
             
             movie = response.json()
             details = self._format_movie_details(movie)
             
-            self.movie_cache[cache_key] = details
+            self.movie_cache[cache_key] = {
+                'ts': int(time.time()),
+                'data': details
+            }
             self._save_cache()
             
             return details
@@ -218,7 +230,8 @@ class TMDbFetcher:
             params = {'api_key': self.api_key}
             response = self.session.get(
                 f"{self.base_url}/genre/movie/list",
-                params=params
+                params=params,
+                timeout=10
             )
             response.raise_for_status()
             genres = response.json().get('genres', [])
@@ -254,10 +267,45 @@ class TMDbFetcher:
             'popularity': 0,
             'overview': '',
             'date': '',
-            'genres': []
         })
+        if 'genres' in df.columns:
+            def _safe_genres(g):
+                if g is None:
+                    return []
+                if isinstance(g, float) and pd.isna(g):
+                    return []
+                return g
+            df['genres'] = df['genres'].apply(_safe_genres)
+
+        if 'genres' in df.columns:
+            genres_map = self.get_genres()
+            df['genres'] = df['genres'].apply(lambda g: self._normalize_genres(g, genres_map))
         
         return df
+
+    def _normalize_genres(self, genres_value, genres_map):
+        """Convert mixed TMDb genre payloads to list[str]."""
+        if genres_value is None or genres_value == "":
+            return []
+
+        if isinstance(genres_value, list):
+            if genres_value and isinstance(genres_value[0], int):
+                return [genres_map.get(gid, str(gid)) for gid in genres_value]
+            if genres_value and isinstance(genres_value[0], dict):
+                return [g.get('name', '').strip() for g in genres_value if g.get('name')]
+            return [str(g).strip() for g in genres_value if str(g).strip()]
+
+        if isinstance(genres_value, str):
+            text = genres_value.strip()
+            if text.startswith('[') and text.endswith(']'):
+                try:
+                    parsed = ast.literal_eval(text)
+                    return self._normalize_genres(parsed, genres_map)
+                except Exception:
+                    pass
+            return [g.strip() for g in text.split(',') if g.strip()]
+
+        return []
     
     def _format_movie_details(self, movie):
         """Format movie details response"""
@@ -356,6 +404,12 @@ class TMDbFetcher:
             53: 'Thriller',
             80: 'Crime',
         }
+
+    def _cache_valid(self, payload):
+        """Support both legacy cache entries and timestamped cache entries."""
+        if not isinstance(payload, dict) or 'ts' not in payload:
+            return True
+        return (int(time.time()) - int(payload['ts'])) <= self.cache_timeout
 
 
 def get_tmdb_fetcher(api_key=None):

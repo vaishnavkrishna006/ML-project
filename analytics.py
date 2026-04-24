@@ -103,6 +103,38 @@ class MovieAnalytics:
             }
         
         return result
+
+    def get_most_popular_genres_per_year(self, top_k: int = 3) -> Dict:
+        """Return top-k genres for each year based on frequency."""
+        if self.movies_df.empty:
+            return {}
+
+        df = self.movies_df.copy()
+        if 'date' in df.columns:
+            df['year'] = pd.to_datetime(df['date'], errors='coerce').dt.year
+        else:
+            return {}
+
+        df = df.dropna(subset=['year'])
+        if df.empty:
+            return {}
+
+        result = {}
+        for year, year_df in df.groupby('year'):
+            counts = {}
+            for genres in year_df['genres']:
+                if isinstance(genres, list):
+                    for g in genres:
+                        counts[g] = counts.get(g, 0) + 1
+                elif isinstance(genres, str):
+                    for g in genres.split(','):
+                        g = g.strip()
+                        if g:
+                            counts[g] = counts.get(g, 0) + 1
+
+            top = sorted(counts.items(), key=lambda item: item[1], reverse=True)[:top_k]
+            result[int(year)] = [{'genre': genre, 'count': count} for genre, count in top]
+        return result
     
     def get_highest_rated_movies(self, limit: int = 10, min_votes: int = 100) -> pd.DataFrame:
         """
@@ -147,7 +179,7 @@ class MovieAnalytics:
         
         # Get genre list
         all_genres = {}
-        for genres in self.movies_df['genres']:
+        for idx, genres in enumerate(self.movies_df['genres']):
             if isinstance(genres, list):
                 for genre in genres:
                     if genre not in all_genres:
@@ -156,8 +188,14 @@ class MovieAnalytics:
                     
                     # Add rating if available
                     if 'rating' in self.movies_df.columns:
-                        idx = self.movies_df[self.movies_df['genres'] == genres].index[0]
-                        all_genres[genre]['ratings'].append(self.movies_df.loc[idx, 'rating'])
+                        all_genres[genre]['ratings'].append(self.movies_df.iloc[idx]['rating'])
+            elif isinstance(genres, str):
+                for genre in [g.strip() for g in genres.split(',') if g.strip()]:
+                    if genre not in all_genres:
+                        all_genres[genre] = {'count': 0, 'ratings': []}
+                    all_genres[genre]['count'] += 1
+                    if 'rating' in self.movies_df.columns:
+                        all_genres[genre]['ratings'].append(self.movies_df.iloc[idx]['rating'])
         
         # Calculate statistics
         for genre, data in all_genres.items():
@@ -314,6 +352,7 @@ class MovieAnalytics:
         return {
             'summary': self.get_summary_statistics(),
             'genre_trends': self.get_genre_trends(),
+            'most_popular_genres_per_year': self.get_most_popular_genres_per_year(),
             'popular_genres': self.get_popular_genres(),
             'genre_statistics': self.get_genre_statistics(),
             'rating_distribution': self.get_rating_distribution(),

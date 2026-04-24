@@ -134,6 +134,12 @@ body {
     font-size: 0.9em;
 }
 
+.filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
 .btn-submit {
     width: 100%;
     padding: 15px;
@@ -207,6 +213,52 @@ body {
 
 .recommendations-table-container {
     overflow-x: auto;
+}
+
+.recommendations-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.rec-card {
+    border: 1px solid #e6e6e6;
+    border-radius: 12px;
+    padding: 14px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.rec-card h3 {
+    margin-top: 10px;
+    margin-bottom: 8px;
+    color: #3e4aa6;
+    font-size: 1.05em;
+}
+
+.rec-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.rec-meta {
+    color: #555;
+    font-size: 0.9em;
+    margin-bottom: 8px;
+}
+
+.rec-genres {
+    color: #764ba2;
+    font-size: 0.85em;
+    margin-bottom: 8px;
+}
+
+.rec-overview {
+    color: #666;
+    font-size: 0.9em;
+    line-height: 1.4;
 }
 
 table {

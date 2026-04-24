@@ -6,7 +6,7 @@ for intelligent movie recommendations
 
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Tuple
+from typing import List, Dict
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer
 import logging
@@ -35,15 +35,15 @@ class HybridRecommendationEngine:
         self.nlp_processor = nlp_processor
         self.tmdb_fetcher = tmdb_fetcher
         self.genre_map = {}
-        self.tfidf_vectorizer = TfidfVectorizer(max_features=100, stop_words='english')
-        self.overview_vectors = None
+        self.tfidf_vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
+        self._embedding_cache = {}
         
         # Weighting parameters (can be tuned)
         self.weights = {
-            'semantic_similarity': 0.30,
+            'semantic_similarity': 0.40,
             'genre_match': 0.20,
-            'rating': 0.25,
-            'popularity': 0.15,
+            'rating': 0.20,
+            'popularity': 0.10,
             'keyword_match': 0.10,
         }
     
@@ -95,7 +95,7 @@ class HybridRecommendationEngine:
         
         # Sort and return top N
         scores_df = scores_df.sort_values('final_score', ascending=False)
-        result = scores_df.head(n_recommendations).copy()
+        result = self._diversify_results(scores_df, n_recommendations)
         result['rank'] = range(1, len(result) + 1)
         
         return result[['rank', 'id', 'title', 'rating', 'popularity', 
@@ -115,6 +115,19 @@ class HybridRecommendationEngine:
             filtered['year'] = pd.to_datetime(filtered.get('date', '2023'), errors='coerce').dt.year
             filtered = filtered[(filtered['year'] >= target_year - 2) & (filtered['year'] <= target_year + 2)]
         
+        # If query is "like Titanic", find the reference movie and bias pool around it.
+        reference_title = intent.get('reference_title')
+        if reference_title and self.tmdb_fetcher:
+            ref_results = self.tmdb_fetcher.search_movies(reference_title, max_results=1)
+            if not ref_results.empty:
+                ref_overview = str(ref_results.iloc[0].get('overview', '')).strip()
+                if ref_overview:
+                    filtered = filtered.copy()
+                    filtered['overview'] = filtered['overview'].fillna('')
+                    filtered = filtered[
+                        filtered['overview'].str.len().gt(0)
+                    ]
+
         return filtered if not filtered.empty else movies_df
     
     def _calculate_scores(self, movies_df: pd.DataFrame, intent: Dict, 
@@ -130,12 +143,12 @@ class HybridRecommendationEngine:
         # 1. Semantic Similarity Score
         if self.nlp_processor and hasattr(self.nlp_processor, 'use_semantic') and self.nlp_processor.use_semantic:
             scores_df['semantic_score'] = self._calculate_semantic_similarity_scores(
-                movies_df['overview'].values, 
+                movies_df['overview'].fillna('').values,
                 query
             )
         else:
             scores_df['semantic_score'] = self._calculate_tfidf_similarity_scores(
-                movies_df['overview'].values, 
+                movies_df['overview'].fillna('').values,
                 query
             )
         
@@ -151,7 +164,9 @@ class HybridRecommendationEngine:
         
         # 4. Popularity Score (normalized)
         if scores_df['popularity'].max() > 0:
-            scores_df['popularity_score'] = scores_df['popularity'] / scores_df['popularity'].max()
+            # Log scaling avoids over-promoting blockbuster outliers.
+            scaled = np.log1p(scores_df['popularity'])
+            scores_df['popularity_score'] = scaled / max(scaled.max(), 1e-9)
         
         # 5. Keyword Match Score
         if intent.get('keywords'):
@@ -181,9 +196,16 @@ class HybridRecommendationEngine:
             if query_embedding is None:
                 return np.zeros(len(texts))
             
-            text_embeddings = np.array([
-                self.nlp_processor.get_semantic_embedding(text) for text in texts
-            ])
+            text_embeddings = []
+            for text in texts:
+                text_key = str(text)[:500]
+                if text_key not in self._embedding_cache:
+                    self._embedding_cache[text_key] = self.nlp_processor.get_semantic_embedding(str(text))
+                text_embeddings.append(self._embedding_cache[text_key])
+
+            if any(emb is None for emb in text_embeddings):
+                return self._calculate_tfidf_similarity_scores(texts, query)
+            text_embeddings = np.array(text_embeddings)
             
             similarities = cosine_similarity([query_embedding], text_embeddings)[0]
             return np.maximum(similarities, 0)  # Ensure non-negative
@@ -227,6 +249,40 @@ class HybridRecommendationEngine:
                 scores[idx] = min(matches / max(len(query_genres), 1), 1.0)
         
         return scores
+
+    def _diversify_results(self, ranked_df: pd.DataFrame, n_recommendations: int) -> pd.DataFrame:
+        """
+        Lightweight diversity step:
+        avoid returning too many movies from the same genre back-to-back.
+        """
+        if ranked_df.empty:
+            return ranked_df.head(0)
+
+        selected_rows = []
+        genre_counts = {}
+        max_per_genre = max(1, int(np.ceil(n_recommendations * 0.6)))
+
+        for _, row in ranked_df.iterrows():
+            genres = row.get('genres', [])
+            if not isinstance(genres, list):
+                genres = [g.strip() for g in str(genres).split(',') if g.strip()]
+            primary = genres[0] if genres else 'Unknown'
+
+            if genre_counts.get(primary, 0) >= max_per_genre:
+                continue
+
+            selected_rows.append(row)
+            genre_counts[primary] = genre_counts.get(primary, 0) + 1
+
+            if len(selected_rows) >= n_recommendations:
+                break
+
+        if len(selected_rows) < n_recommendations:
+            # Fill remaining slots without diversity constraints.
+            remaining = ranked_df.iloc[len(selected_rows):].head(n_recommendations - len(selected_rows))
+            selected_rows.extend([row for _, row in remaining.iterrows()])
+
+        return pd.DataFrame(selected_rows)
     
     def _calculate_keyword_match_scores(self, texts: np.ndarray, 
                                        keywords: List[str]) -> np.ndarray:
