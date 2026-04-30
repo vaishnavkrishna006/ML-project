@@ -1,10 +1,9 @@
-flask
-flask-cors
 pandas
 numpy
-scipy
 scikit-learn
-lightfm
+flask
+flask-cors
+streamlit
+plotly
+joblib
 requests
-python-dotenv
-gunicorn
