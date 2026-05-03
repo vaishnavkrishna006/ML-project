@@ -1,51 +1,59 @@
-# Installation and Setup Guide
+# ⚙️ Installation & Setup Guide
 
-This project uses **LightFM** for movie recommendations. Due to compatibility issues with Python 3.12+ and Windows, we use a community-maintained fork: `lightfm-next`.
+Follow these steps to get **CineMatch** running on your local machine.
 
-## 🛠️ Step 1: Environment Setup
+## 📋 Prerequisites
+- Python 3.9 or higher
+- Windows, macOS, or Linux
 
-1. Create a virtual environment:
-   ```powershell
-   python -m venv venv
-   ```
+## 🛠️ Step 1: Virtual Environment
+It is highly recommended to use a virtual environment to keep dependencies organized.
 
-2. Activate it:
-   ```powershell
-   .\venv\Scripts\Activate.ps1
-   ```
+```powershell
+# Create environment
+python -m venv venv
 
-3. Upgrade pip and install build tools:
-   ```powershell
-   python -m pip install --upgrade pip wheel setuptools
-   ```
+# Activate (Windows)
+.\venv\Scripts\activate
+
+# Activate (macOS/Linux)
+source venv/bin/activate
+```
 
 ## 📦 Step 2: Install Dependencies
+Install all required libraries including Pandas, Scikit-learn, Flask, and Streamlit.
 
-Install required packages in order:
-```powershell
-pip install numpy scipy scikit-learn pandas flask streamlit plotly joblib requests
-pip install lightfm-next
+```bash
+pip install -r requirements.txt
 ```
 
-> [!NOTE]
-> We use `lightfm-next` because the original `lightfm` currently fails to build on Windows with Python 3.13.
+## 🧠 Step 3: Model Training
+Before you can get recommendations, the AI needs to process the movie database.
 
-## 🚀 Step 3: Train the Model
-
-Before running the app, you must generate the model artifacts:
-```powershell
+```bash
 python train_model.py
 ```
-This will download the MovieLens dataset and save the trained model to `src/models/artifacts/`.
+*Note: This script merges the classic MovieLens dataset with modern collections (Marvel, DC, etc.) and generates `src/models/artifacts/recommender.pkl`.*
 
-## 📊 Step 4: Run the Project
+## 🚀 Step 4: Run the Application
 
-- **Backend API**: `python app.py`
-- **Dashboard**: `streamlit run dashboard/app.py`
+### Option A: Interactive Dashboard (Recommended)
+This is the best way to experience CineMatch.
+```bash
+streamlit run dashboard/app.py
+```
+
+### Option B: Flask API
+If you need to use the system as a backend service.
+```bash
+python app.py
+```
+
+## 🧪 Testing the API
+Once the Flask server is running, you can test it using a browser or Postman:
+- **Health Check**: `http://localhost:5000/health`
+- **Recommend by Title**: `http://localhost:5000/recommend?title=Toy Story (1995)`
+- **Natural Language Search**: `http://localhost:5000/recommend?query=I want a sci-fi movie`
 
 ---
-
-## 💡 Alternatives for Windows
-If you encounter performance issues with LightFM on Windows (e.g., lack of OpenMP support), consider switching to:
-1. **Implicit**: Extremely fast matrix factorization with great Windows support.
-2. **Surprise**: Easy-to-use scikit-style recommendation library.
+**Troubleshooting**: If the dashboard shows "Model not found", ensure you ran `python train_model.py` and that the `src/models/artifacts/recommender.pkl` file was created.

@@ -1,58 +1,67 @@
-# Movie Recommendation ML API
+# 🎬 CineMatch: AI Movie Recommendation System
 
-A clean, production-ready machine learning recommendation system powered by LightFM.
+CineMatch is a modern, high-performance movie recommendation engine built with Python. It uses **TF-IDF Vectorization** and **Cosine Similarity** to provide intelligent movie suggestions based on titles, genres, and natural language descriptions.
 
-## Features
-- True Matrix Factorization using LightFM with WARP loss.
-- Flask API for serving real-time recommendations.
-- Modular architecture separating models, data loading, and NLP logic.
+## 🌟 Features
+- **Title-Based Recommendations**: Find movies similar to your favorites (e.g., "Inception").
+- **Natural Language Search**: Type how you feel (e.g., "I want a dark crime thriller") and get relevant matches.
+- **Modern Collections**: Includes classic MovieLens 100k data PLUS modern **Marvel (MCU)**, **DC**, and **Warner Bros** collections.
+- **Interactive Dashboard**: A sleek Streamlit-based UI for exploring the movie universe.
+- **Lightweight & Fast**: No complex C++ dependencies or heavy neural networks. Runs perfectly on Windows.
 
-## Project Structure
+## 🏗️ Project Structure
 ```text
 ML-project/
 ├── data/
-│   └── sample_data.csv          # Movie ratings dataset (user_id, movie_id, rating)
+│   └── ml-100k/             # Legacy MovieLens dataset
 ├── src/
-│   ├── models/
-│   │   └── lightfm_model.py     # LightFM recommender implementation
-│   ├── nlp/
-│   │   └── nlp_query_processor.py # NLP intent extraction (decoupled)
-│   ├── utils/
-│   │   └── data_loader.py       # Data loading utilities
-├── app.py                       # Flask API
-├── train_model.py               # Script to train and evaluate the model
-├── requirements.txt             # Project dependencies
+│   └── models/
+│       ├── artifacts/       # Saved model (recommender.pkl)
+│       └── recommender.py   # Core ML logic (TF-IDF + Cosine Similarity)
+├── dashboard/
+│   └── app.py               # Streamlit UI (CineMatch Dashboard)
+├── app.py                   # Flask API for integration
+├── train_model.py           # Training pipeline (Data Processing + ML)
+├── requirements.txt         # Project dependencies
 └── README.md
 ```
 
-## Setup & Execution
+## 🚀 Quick Start
 
-### 1. Install Dependencies
+### 1. Setup Environment
 ```bash
+python -m venv venv
+.\venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Train the Model
-Run the training script to build the model from `sample_data.csv` (or auto-generated dummy data) and save it to `model.pkl`.
+### 2. Train the AI Model
+Run the training script to process the MovieLens data and the Marvel/DC collections.
 ```bash
 python train_model.py
 ```
 
-### 3. Start the API Server
-Start the Flask server which will load the trained `model.pkl` on startup.
+### 3. Launch the Dashboard
+Experience the recommendations in a beautiful UI.
+```bash
+streamlit run dashboard/app.py
+```
+
+### 4. (Optional) Run API
+If you want to integrate CineMatch with other apps:
 ```bash
 python app.py
 ```
 
-### 4. API Usage
-- **Health Check**: `GET http://127.0.0.1:5000/`
-- **Get Recommendations**: `GET http://127.0.0.1:5000/recommend/<user_id>?top_k=5`
+## 📊 How it Works
+The system uses **Natural Language Processing (NLP)**:
+1.  **Feature Extraction**: It combines movie genres, tags, and keywords into a text "profile".
+2.  **Vectorization**: Uses `TfidfVectorizer` to convert these profiles into mathematical vectors.
+3.  **Similarity Calculation**: When you search, it calculates the **Cosine Similarity** between your query and all movies in the database to find the perfect match.
 
-*Example response:*
-```json
-{
-  "user_id": "1",
-  "recommendations": [104, 105],
-  "top_k": 5
-}
-```
+## 🍿 Dataset
+- **MovieLens 100k**: 1,600+ classic movies.
+- **Custom Collections**: Modern hits from Marvel, DC, and WB added manually to ensure relevant results for 2024.
+
+---
+Built for academic and experimental use in Machine Learning.
